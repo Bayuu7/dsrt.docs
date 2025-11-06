@@ -1,0 +1,41 @@
+import { Loader } from './Loader.js';
+import { Object3D } from '../core/Object3D.js';
+
+/**
+ * @module DSRTObjectLoader
+ * @class ObjectLoader
+ * @classdesc
+ * Loader for DSRT JSON object format.
+ *
+ * @property {boolean} dsrtIsObjectLoader - Type guard flag for DSRT.ObjectLoader.
+ * @see DSRTObjectLoader.test.js
+ */
+class ObjectLoader extends Loader {
+
+  constructor(manager = null) {
+    super(manager);
+
+    /** @type {boolean} */
+    this.dsrtIsObjectLoader = true;
+  }
+
+  async load(url, onLoad, onProgress, onError) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`ObjectLoader: Failed to load ${url}`);
+      const json = await response.json();
+      const obj = this.parse(json);
+      if (onLoad) onLoad(obj);
+    } catch (err) {
+      if (onError) onError(err);
+    }
+  }
+
+  parse(json) {
+    const obj = new Object3D();
+    obj.name = json.name || '';
+    return obj;
+  }
+}
+
+export { ObjectLoader };
