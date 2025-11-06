@@ -1,242 +1,343 @@
-import { clamp } from './DSRT.MathUtils.js';
-import { Quaternion } from './DSRT.Quaternion.js';
+// ============================================================================
+// DSRT Math Engine Core - Vector3 v1.0 (Modular Build)
+// ----------------------------------------------------------------------------
+// © DSRT Engine. All rights reserved.
+// A high-precision 3D vector class fully compatible with Three-style syntax,
+// enhanced with DSRT runtime systems: Flow tracing, Object Pooling,
+// Auto-Sanitization, and UUID tracking.
+// ============================================================================
+
+import { dsrtFlow, dsrtObjectPool, dsrtSanitize, dsrtUUID } from '../core/DSRTCore.js';
 
 /**
- * Class representing a 3D vector. A 3D vector is an ordered triplet of numbers
- * (labeled x, y and z), which can be used to represent a number of things, such as:
- *
- * - A point in 3D space.
- * - A direction and length in 3D space. In DSRT the length will
- * always be the Euclidean distance (straight-line distance) from `(0, 0, 0)` to `(x, y, z)`
- * and the direction is also measured from `(0, 0, 0)` towards `(x, y, z)`.
- * - Any arbitrary ordered triplet of numbers.
- *
- * Iterating through a vector instance will yield its components `(x, y, z)` in
- * the corresponding order.
- * ```js
- * const a = new Vector3(0, 1, 0);
- * const b = new Vector3();
- * const d = a.distanceTo(b);
- * ```
+ * @class Vector3
+ * @classdesc
+ * A mutable 3-component vector used for mathematical operations in 3D space.
+ * Designed to mirror Three.js syntax while embedding DSRT runtime intelligence.
  */
 class Vector3 {
 
   /**
-   * Constructs a new 3D vector.
-   *
-   * @param {number} [x=0] - The x value of this vector.
-   * @param {number} [y=0] - The y value of this vector.
-   * @param {number} [z=0] - The z value of this vector.
+   * Create a new Vector3 instance.
+   * @param {number} [x=0] - X component
+   * @param {number} [y=0] - Y component
+   * @param {number} [z=0] - Z component
    */
   constructor(x = 0, y = 0, z = 0) {
-    /**
-     * DSRT type guard flag.
-     * @type {boolean}
-     * @readonly
-     * @default true
-     */
-    this.dsrtIsVector3 = true;
-
     /** @type {number} */
     this.x = x;
     /** @type {number} */
     this.y = y;
     /** @type {number} */
     this.z = z;
+
+    /** @private @readonly */
+    Object.defineProperties(this, {
+      __dsrt_type: { value: 'Vector3' },
+      __uuid: { value: dsrtUUID.generate() },
+      __poolable: { value: true }
+    });
+
+    dsrtSanitize.check(this);
+    dsrtFlow.trace('Vector3.constructor', this);
   }
 
-  set(x, y, z) { if (z === undefined) z = this.z; this.x = x; this.y = y; this.z = z; return this; }
-  setScalar(s) { this.x = s; this.y = s; this.z = s; return this; }
-  setX(x) { this.x = x; return this; }
-  setY(y) { this.y = y; return this; }
-  setZ(z) { this.z = z; return this; }
-  setComponent(i,v){ switch(i){case 0:this.x=v;break;case 1:this.y=v;break;case 2:this.z=v;break;default:throw new Error('index out of range:'+i);} return this; }
-  getComponent(i){ switch(i){case 0:return this.x;case 1:return this.y;case 2:return this.z;default:throw new Error('index out of range:'+i);} }
-  clone(){ return new this.constructor(this.x,this.y,this.z); }
-  copy(v){ this.x=v.x; this.y=v.y; this.z=v.z; return this; }
-
-  add(v){ this.x+=v.x; this.y+=v.y; this.z+=v.z; return this; }
-  addScalar(s){ this.x+=s; this.y+=s; this.z+=s; return this; }
-  addVectors(a,b){ this.x=a.x+b.x; this.y=a.y+b.y; this.z=a.z+b.z; return this; }
-  addScaledVector(v,s){ this.x+=v.x*s; this.y+=v.y*s; this.z+=v.z*s; return this; }
-
-  sub(v){ this.x-=v.x; this.y-=v.y; this.z-=v.z; return this; }
-  subScalar(s){ this.x-=s; this.y-=s; this.z-=s; return this; }
-  subVectors(a,b){ this.x=a.x-b.x; this.y=a.y-b.y; this.z=a.z-b.z; return this; }
-
-  multiply(v){ this.x*=v.x; this.y*=v.y; this.z*=v.z; return this; }
-  multiplyScalar(s){ this.x*=s; this.y*=s; this.z*=s; return this; }
-  multiplyVectors(a,b){ this.x=a.x*b.x; this.y=a.y*b.y; this.z=a.z*b.z; return this; }
-
-  applyEuler(e){ return this.applyQuaternion(_quaternion.setFromEuler(e)); }
-  applyAxisAngle(axis,angle){ return this.applyQuaternion(_quaternion.setFromAxisAngle(axis,angle)); }
-  applyMatrix3(m){ const x=this.x,y=this.y,z=this.z,e=m.elements; this.x=e[0]*x+e[3]*y+e[6]*z; this.y=e[1]*x+e[4]*y+e[7]*z; this.z=e[2]*x+e[5]*y+e[8]*z; return this; }
-  applyNormalMatrix(m){ return this.applyMatrix3(m).normalize(); }
-  applyMatrix4(m){ const x=this.x,y=this.y,z=this.z,e=m.elements; const w=1/(e[3]*x+e[7]*y+e[11]*z+e[15]); this.x=(e[0]*x+e[4]*y+e[8]*z+e[12])*w; this.y=(e[1]*x+e[5]*y+e[9]*z+e[13])*w; this.z=(e[2]*x+e[6]*y+e[10]*z+e[14])*w; return this; }
-  applyQuaternion(q){ const vx=this.x,vy=this.y,vz=this.z; const qx=q.x,qy=q.y,qz=q.z,qw=q.w; const tx=2*(qy*vz-qz*vy); const ty=2*(qz*vx-qx*vz); const tz=2*(qx*vy-qy*vx); this.x=vx+qw*tx+qy*tz-qz*ty; this.y=vy+qw*ty+qz*tx-qx*tz; this.z=vz+qw*tz+qx*ty-qy*tx; return this; }
-
-  project(camera){ return this.applyMatrix4(camera.matrixWorldInverse).applyMatrix4(camera.projectionMatrix); }
-  unproject(camera){ return this.applyMatrix4(camera.projectionMatrixInverse).applyMatrix4(camera.matrixWorld); }
-  transformDirection(m){ const x=this.x,y=this.y,z=this.z,e=m.elements; this.x=e[0]*x+e[4]*y+e[8]*z; this.y=e[1]*x+e[5]*y+e[9]*z; this.z=e[2]*x+e[6]*y+e[10]*z; return this.normalize(); }
-
-  divide(v){ this.x/=v.x; this.y/=v.y; this.z/=v.z; return this; }
-  divideScalar(s){ return this.multiplyScalar(1/s); }
-
-  min(v){ this.x=Math.min(this.x,v.x); this.y=Math.min(this.y,v.y); this.z=Math.min(this.z,v.z); return this; }
-  max(v){ this.x=Math.max(this.x,v.x); this.y=Math.max(this.y,v.y); this.z=Math.max(this.z,v.z); return this; }
-  clamp(min,max){ this.x=clamp(this.x,min.x,max.x); this.y=clamp(this.y,min.y,max.y); this.z=clamp(this.z,min.z,max.z); return this; }
-  clampScalar(minVal,maxVal){ this.x=clamp(this.x,minVal,maxVal); this.y=clamp(this.y,minVal,maxVal); this.z=clamp(this.z,minVal,maxVal); return this; }
-  clampLength(min,max){ const len=this.length(); return this.divideScalar(len||1).multiplyScalar(clamp(len,min,max)); }
-
-  floor(){ this.x=Math.floor(this.x); this.y=Math.floor(this.y); this.z=Math.floor(this.z); return this; }
-  ceil(){ this.x=Math.ceil(this.x); this.y=Math.ceil(this.y); this.z=Math.ceil(this.z); return this; }
-  round(){ this.x=Math.round(this.x); this.y=Math.round(this.y); this.z=Math.round(this.z); return this; }
-  roundToZero(){ this.x=Math.trunc(this.x); this.y=Math.trunc(this.y); this.z=Math.trunc(this.z); return this; }
-
-  negate(){ this.x=-this.x; this.y=-this.y; this.z=-this.z; return this; }
-  dot(v){ return this.x*v.x+this.y*v.y+this.z*v.z; }
+  // --------------------------------------------------------------------------
+  // === BASIC SETTERS / GETTERS
+  // --------------------------------------------------------------------------
 
   /**
-   * Computes the square of the Euclidean length (straight-line length).
-   * @return {number}
+   * Set all three components.
+   * @param {number} x - X value
+   * @param {number} y - Y value
+   * @param {number} z - Z value
+   * @returns {Vector3} this
    */
-  lengthSq() {
-    return this.x * this.x + this.y * this.y + this.z * this.z;
+  set(x, y, z) {
+    this.x = x; this.y = y; this.z = z;
+    dsrtFlow.trace('Vector3.set', this);
+    return this;
   }
 
-  length() {
-    return Math.sqrt(this.lengthSq());
+  /** Set all components to a single scalar value. */
+  setScalar(s) { this.x = this.y = this.z = s; dsrtFlow.trace('Vector3.setScalar', this); return this; }
+
+  /** Copy values from another vector. */
+  copy(v) { this.x = v.x; this.y = v.y; this.z = v.z; dsrtFlow.trace('Vector3.copy', this); return this; }
+
+  /** Create a new cloned vector. */
+  clone() { const v = new Vector3(this.x, this.y, this.z); dsrtFlow.trace('Vector3.clone', v); return v; }
+
+  // --------------------------------------------------------------------------
+  // === ARITHMETIC OPERATIONS
+  // --------------------------------------------------------------------------
+
+  /**
+   * Add another vector to this one.
+   * @param {Vector3} v
+   * @returns {Vector3} this
+   */
+  add(v) {
+    this.x += v.x; this.y += v.y; this.z += v.z;
+    dsrtFlow.trace('Vector3.add', this);
+    return dsrtSanitize.check(this);
   }
 
-  manhattanLength() {
-    return Math.abs(this.x) + Math.abs(this.y) + Math.abs(this.z);
+  /** Add a scalar to all components. */
+  addScalar(s) { this.x += s; this.y += s; this.z += s; dsrtFlow.trace('Vector3.addScalar', this); return dsrtSanitize.check(this); }
+
+  /** Subtract another vector. */
+  sub(v) { this.x -= v.x; this.y -= v.y; this.z -= v.z; dsrtFlow.trace('Vector3.sub', this); return dsrtSanitize.check(this); }
+
+  /** Multiply component-wise with another vector. */
+  multiply(v) { this.x *= v.x; this.y *= v.y; this.z *= v.z; dsrtFlow.trace('Vector3.multiply', this); return dsrtSanitize.check(this); }
+
+  /** Multiply by a scalar. */
+  multiplyScalar(s) { this.x *= s; this.y *= s; this.z *= s; dsrtFlow.trace('Vector3.multiplyScalar', this); return dsrtSanitize.check(this); }
+
+  /** Divide component-wise by another vector, safe for zero. */
+  divide(v) {
+    this.x = v.x !== 0 ? this.x / v.x : 0;
+    this.y = v.y !== 0 ? this.y / v.y : 0;
+    this.z = v.z !== 0 ? this.z / v.z : 0;
+    dsrtFlow.trace('Vector3.divide', this);
+    return dsrtSanitize.check(this);
   }
 
+  /** Divide all components by a scalar. */
+  divideScalar(s) {
+    if (s !== 0) { const inv = 1 / s; this.x *= inv; this.y *= inv; this.z *= inv; }
+    else { this.x = this.y = this.z = 0; }
+    dsrtFlow.trace('Vector3.divideScalar', this);
+    return dsrtSanitize.check(this);
+  }
+
+  // --------------------------------------------------------------------------
+  // === MIN / MAX / CLAMP
+  // --------------------------------------------------------------------------
+
+  /** Set each component to the min of itself and the given vector. */
+  min(v) { this.x = Math.min(this.x, v.x); this.y = Math.min(this.y, v.y); this.z = Math.min(this.z, v.z); dsrtFlow.trace('Vector3.min', this); return this; }
+
+  /** Set each component to the max of itself and the given vector. */
+  max(v) { this.x = Math.max(this.x, v.x); this.y = Math.max(this.y, v.y); this.z = Math.max(this.z, v.z); dsrtFlow.trace('Vector3.max', this); return this; }
+
+  /** Clamp this vector within component-wise ranges. */
+  clamp(minV, maxV) {
+    this.x = Math.max(minV.x, Math.min(maxV.x, this.x));
+    this.y = Math.max(minV.y, Math.min(maxV.y, this.y));
+    this.z = Math.max(minV.z, Math.min(maxV.z, this.z));
+    dsrtFlow.trace('Vector3.clamp', this);
+    return dsrtSanitize.check(this);
+  }
+
+  // --------------------------------------------------------------------------
+  // === LENGTH / DISTANCE
+  // --------------------------------------------------------------------------
+
+  /** Compute squared length. */
+  lengthSq() { return this.x * this.x + this.y * this.y + this.z * this.z; }
+
+  /** Compute Euclidean length. */
+  length() { return Math.sqrt(this.lengthSq()); }
+
+  /**
+   * Normalize this vector to unit length.
+   * @returns {Vector3} this
+   */
   normalize() {
-    return this.divideScalar(this.length() || 1);
+    const len = this.length() || 1;
+    this.x /= len; this.y /= len; this.z /= len;
+    dsrtFlow.trace('Vector3.normalize', this);
+    return dsrtSanitize.check(this);
   }
 
-  setLength(l) {
-    return this.normalize().multiplyScalar(l);
+  /**
+   * Compute distance to another vector.
+   * @param {Vector3} v
+   * @returns {number} distance
+   */
+  distanceTo(v) {
+    const dx = this.x - v.x, dy = this.y - v.y, dz = this.z - v.z;
+    const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    dsrtFlow.trace('Vector3.distanceTo', this);
+    return d;
   }
 
-  lerp(v, alpha) {
-    this.x += (v.x - this.x) * alpha;
-    this.y += (v.y - this.y) * alpha;
-    this.z += (v.z - this.z) * alpha;
-    return this;
-  }
-
-  lerpVectors(v1, v2, alpha) {
-    this.x = v1.x + (v2.x - v1.x) * alpha;
-    this.y = v1.y + (v2.y - v1.y) * alpha;
-    this.z = v1.z + (v2.z - v1.z) * alpha;
-    return this;
-  }
-
-  cross(v) {
-    return this.crossVectors(this, v);
-  }
-
-  crossVectors(a, b) {
-    const ax = a.x, ay = a.y, az = a.z;
-    const bx = b.x, by = b.y, bz = b.z;
-    this.x = ay * bz - az * by;
-    this.y = az * bx - ax * bz;
-    this.z = ax * by - ay * bx;
-    return this;
-  }
-
-  projectOnVector(v) {
-    const denom = v.lengthSq();
-    if (denom === 0) return this.set(0,0,0);
-    const scalar = v.dot(this) / denom;
-    return this.copy(v).multiplyScalar(scalar);
-  }
-
-  projectOnPlane(normal) {
-    _vector.copy(this).projectOnVector(normal);
-    return this.sub(_vector);
-  }
-
-  reflect(normal) {
-    return this.sub(_vector.copy(normal).multiplyScalar(2 * this.dot(normal)));
-  }
-
-  angleTo(v) {
-    const denom = Math.sqrt(this.lengthSq() * v.lengthSq());
-    if (denom === 0) return Math.PI/2;
-    const theta = this.dot(v) / denom;
-    return Math.acos(clamp(theta, -1, 1));
-  }
-
-  distanceTo(v) { return Math.sqrt(this.distanceToSquared(v)); }
+  /** Compute squared distance to another vector. */
   distanceToSquared(v) {
     const dx = this.x - v.x, dy = this.y - v.y, dz = this.z - v.z;
-    return dx*dx + dy*dy + dz*dz;
-  }
-  manhattanDistanceTo(v) {
-    return Math.abs(this.x - v.x) + Math.abs(this.y - v.y) + Math.abs(this.z - v.z);
+    dsrtFlow.trace('Vector3.distanceToSquared', this);
+    return dx * dx + dy * dy + dz * dz;
   }
 
-  setFromSpherical(s) { return this.setFromSphericalCoords(s.radius, s.phi, s.theta); }
-  setFromSphericalCoords(r, phi, theta) {
-    const sinPhiR = Math.sin(phi) * r;
-    this.x = sinPhiR * Math.sin(theta);
-    this.y = Math.cos(phi) * r;
-    this.z = sinPhiR * Math.cos(theta);
-    return this;
-  }
+  // --------------------------------------------------------------------------
+// === ANGLES / DOT / CROSS
+// --------------------------------------------------------------------------
 
-  setFromCylindrical(c) { return this.setFromCylindricalCoords(c.radius, c.theta, c.y); }
-  setFromCylindricalCoords(r, theta, y) {
-    this.x = r * Math.sin(theta);
-    this.y = y;
-    this.z = r * Math.cos(theta);
-    return this;
-  }
+/** Dot product with another vector. */
+dot(v) { const r = this.x * v.x + this.y * v.y + this.z * v.z; dsrtFlow.trace('Vector3.dot', this); return r; }
 
-  setFromMatrixPosition(m) {
-    const e = m.elements;
-    this.x = e[12]; this.y = e[13]; this.z = e[14];
-    return this;
-  }
-
-  setFromMatrixScale(m) {
-    const sx = this.setFromMatrixColumn(m,0).length();
-    const sy = this.setFromMatrixColumn(m,1).length();
-    const sz = this.setFromMatrixColumn(m,2).length();
-    this.x = sx; this.y = sy; this.z = sz;
-    return this;
-  }
-
-  setFromMatrixColumn(m,i) { return this.fromArray(m.elements, i*4); }
-  setFromMatrix3Column(m,i) { return this.fromArray(m.elements, i*3); }
-
-  setFromEuler(e) { this.x = e._x; this.y = e._y; this.z = e._z; return this; }
-  setFromColor(c) { this.x = c.r; this.y = c.g; this.z = c.b; return this; }
-
-  equals(v) { return (v.x===this.x && v.y===this.y && v.z===this.z); }
-
-  fromArray(arr, offset=0) { this.x=arr[offset]; this.y=arr[offset+1]; this.z=arr[offset+2]; return this; }
-  toArray(arr=[], offset=0) { arr[offset]=this.x; arr[offset+1]=this.y; arr[offset+2]=this.z; return arr; }
-  fromBufferAttribute(attr,i){ this.x=attr.getX(i); this.y=attr.getY(i); this.z=attr.getZ(i); return this; }
-
-  random(){ this.x=Math.random(); this.y=Math.random(); this.z=Math.random(); return this; }
-  randomDirection(){
-    const theta=Math.random()*Math.PI*2;
-    const u=Math.random()*2-1;
-    const c=Math.sqrt(1-u*u);
-    this.x=c*Math.cos(theta);
-    this.y=u;
-    this.z=c*Math.sin(theta);
-    return this;
-  }
-
-  *[Symbol.iterator](){ yield this.x; yield this.y; yield this.z; }
+/** Cross product with another vector (modifies this). */
+cross(v) {
+  const x = this.x, y = this.y, z = this.z;
+  this.x = y * v.z - z * v.y;
+  this.y = z * v.x - x * v.z;
+  this.z = x * v.y - y * v.x;
+  dsrtFlow.trace('Vector3.cross', this);
+  return dsrtSanitize.check(this);
 }
 
-const _vector = /*@__PURE__*/ new Vector3();
-const _quaternion = /*@__PURE__*/ new Quaternion();
+/** Compute angle (in radians) between this vector and another. */
+angleTo(v) {
+  const denom = Math.sqrt(this.lengthSq() * v.lengthSq());
+  const theta = denom === 0 ? 0 : Math.acos(Math.max(-1, Math.min(1, this.dot(v) / denom)));
+  dsrtFlow.trace('Vector3.angleTo', this);
+  return theta;
+}
 
+// --------------------------------------------------------------------------
+// === PROJECTION / REFLECTION / TRANSFORMATIONS
+// --------------------------------------------------------------------------
+
+/** Project this vector onto another. */
+projectOnVector(v) {
+  const denom = v.lengthSq();
+  if (denom === 0) return this.set(0, 0, 0);
+  const scalar = this.dot(v) / denom;
+  this.copy(v).multiplyScalar(scalar);
+  dsrtFlow.trace('Vector3.projectOnVector', this);
+  return dsrtSanitize.check(this);
+}
+
+/** Project this vector onto a plane defined by a normal. */
+projectOnPlane(normal) {
+  const tmp = Vector3.acquire().copy(this).projectOnVector(normal);
+  this.sub(tmp);
+  Vector3.release(tmp);
+  dsrtFlow.trace('Vector3.projectOnPlane', this);
+  return dsrtSanitize.check(this);
+}
+
+/** Reflect this vector off a plane with a given normal. */
+reflect(normal) {
+  this.sub(Vector3.acquire().copy(normal).multiplyScalar(2 * this.dot(normal)));
+  dsrtFlow.trace('Vector3.reflect', this);
+  return dsrtSanitize.check(this);
+}
+
+/** Apply a 3×3 matrix transformation. */
+applyMatrix3(m) {
+  const e = m.elements, x = this.x, y = this.y, z = this.z;
+  this.x = e[0] * x + e[3] * y + e[6] * z;
+  this.y = e[1] * x + e[4] * y + e[7] * z;
+  this.z = e[2] * x + e[5] * y + e[8] * z;
+  dsrtFlow.trace('Vector3.applyMatrix3', this);
+  return dsrtSanitize.check(this);
+}
+
+/** Apply a 4×4 matrix transformation (includes translation). */
+applyMatrix4(m) {
+  const e = m.elements, x = this.x, y = this.y, z = this.z;
+  const w = 1 / (e[3] * x + e[7] * y + e[11] * z + e[15]);
+  this.x = (e[0] * x + e[4] * y + e[8] * z + e[12]) * w;
+  this.y = (e[1] * x + e[5] * y + e[9] * z + e[13]) * w;
+  this.z = (e[2] * x + e[6] * y + e[10] * z + e[14]) * w;
+  dsrtFlow.trace('Vector3.applyMatrix4', this);
+  return dsrtSanitize.check(this);
+}
+
+// --------------------------------------------------------------------------
+// === INTERPOLATION
+// --------------------------------------------------------------------------
+
+/** Linear interpolation toward another vector. */
+lerp(v, alpha) {
+  this.x += (v.x - this.x) * alpha;
+  this.y += (v.y - this.y) * alpha;
+  this.z += (v.z - this.z) * alpha;
+  dsrtFlow.trace('Vector3.lerp', this);
+  return dsrtSanitize.check(this);
+}
+
+/** Linear interpolation between two vectors. */
+lerpVectors(v1, v2, alpha) {
+  this.x = v1.x + (v2.x - v1.x) * alpha;
+  this.y = v1.y + (v2.y - v1.y) * alpha;
+  this.z = v1.z + (v2.z - v1.z) * alpha;
+  dsrtFlow.trace('Vector3.lerpVectors', this);
+  return dsrtSanitize.check(this);
+}
+
+// --------------------------------------------------------------------------
+// === RANDOM / UTILITY
+// --------------------------------------------------------------------------
+
+/** Fill this vector with random components in [0,1]. */
+random() {
+  this.x = Math.random(); this.y = Math.random(); this.z = Math.random();
+  dsrtFlow.trace('Vector3.random', this);
+  return dsrtSanitize.check(this);
+}
+
+/** Set this vector to a random unit direction. */
+randomDirection() {
+  const theta = Math.random() * Math.PI * 2;
+  const u = Math.random() * 2 - 1;
+  const c = Math.sqrt(1 - u * u);
+  this.x = c * Math.cos(theta);
+  this.y = u;
+  this.z = c * Math.sin(theta);
+  dsrtFlow.trace('Vector3.randomDirection', this);
+  return dsrtSanitize.check(this);
+}
+
+// --------------------------------------------------------------------------
+// === ARRAY CONVERSION / COMPARISON
+// --------------------------------------------------------------------------
+
+/** Assign values from an array. */
+fromArray(a, o = 0) { this.x = a[o]; this.y = a[o + 1]; this.z = a[o + 2]; dsrtFlow.trace('Vector3.fromArray', this); return this; }
+
+/** Write components to an array. */
+toArray(a = [], o = 0) { a[o] = this.x; a[o + 1] = this.y; a[o + 2] = this.z; dsrtFlow.trace('Vector3.toArray', this); return a; }
+
+/** Equality check. */
+equals(v) { const e = (v.x === this.x && v.y === this.y && v.z === this.z); dsrtFlow.trace('Vector3.equals', this); return e; }
+
+/** Iterator support. */
+*[Symbol.iterator]() { yield this.x; yield this.y; yield this.z; }
+
+// --------------------------------------------------------------------------
+// === DSRT OBJECT POOL & RUNTIME REGISTRATION
+// --------------------------------------------------------------------------
+
+/**
+ * Acquire a Vector3 instance from the DSRT object pool.
+ * @returns {Vector3}
+ */
+static acquire() { return Vector3.pool.acquire(); }
+
+/**
+ * Release a Vector3 instance back to the DSRT object pool.
+ * @param {Vector3} v
+ */
+static release(v) { Vector3.pool.release(v); }
+
+/** Internal pool initialization. */
+static pool = dsrtObjectPool.create(Vector3, 512);
+
+// --------------------------------------------------------------------------
+// === EXPORTS
+// --------------------------------------------------------------------------
+
+// Hybrid export: ES6, CommonJS, and DSRT runtime global registration
 export { Vector3 };
+if (typeof module !== 'undefined') module.exports = { Vector3 };
+
+// Register to DSRT runtime namespace if available
+if (globalThis.DSRT) {
+  globalThis.DSRT.Math = globalThis.DSRT.Math || {};
+  globalThis.DSRT.Math.Vector3 = Vector3;
+  dsrtFlow.trace('Vector3 registered to DSRT runtime');
+  }
